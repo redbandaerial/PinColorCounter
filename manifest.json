@@ -1,0 +1,9 @@
+{
+  "name": "Pin Color Counter",
+  "short_name": "Pin Counter",
+  "display": "standalone",
+  "start_url": "./",
+  "background_color": "#f5f7fb",
+  "theme_color": "#ffffff",
+  "icons": []
+}

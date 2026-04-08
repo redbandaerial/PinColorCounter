@@ -1,0 +1,538 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pin Color Counter</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#ffffff">
+<style>
+  :root {
+    --bg: #f5f7fb;
+    --card: #ffffff;
+    --text: #111827;
+    --muted: #6b7280;
+    --line: #e5e7eb;
+    --accent: #2563eb;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  .wrap {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 16px;
+  }
+  h1 {
+    margin: 4px 0 8px;
+    font-size: 30px;
+  }
+  p {
+    margin: 0 0 12px;
+    color: var(--muted);
+    line-height: 1.45;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    padding: 16px;
+    margin: 12px 0;
+    box-shadow: 0 1px 2px rgba(0,0,0,.03);
+  }
+  .btn, .file-label {
+    display: inline-block;
+    width: 100%;
+    text-align: center;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 14px;
+    padding: 14px 16px;
+    font-size: 17px;
+    font-weight: 700;
+    cursor: pointer;
+    text-decoration: none;
+  }
+  .btn.secondary {
+    width: auto;
+    background: #eef2ff;
+    color: #1d4ed8;
+    border: 1px solid #c7d2fe;
+    font-weight: 600;
+  }
+  input[type=file] { display: none; }
+  .row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .row:last-child { border-bottom: none; }
+  .left { min-width: 0; }
+  .name {
+    font-size: 18px;
+    font-weight: 700;
+  }
+  .meta {
+    color: var(--muted);
+    font-size: 14px;
+    margin-top: 2px;
+  }
+  .count {
+    font-size: 24px;
+    font-weight: 800;
+    text-align: right;
+    min-width: 64px;
+  }
+  .swatch {
+    width: 14px;
+    height: 14px;
+    border-radius: 999px;
+    display: inline-block;
+    margin-right: 8px;
+    vertical-align: -1px;
+    border: 1px solid rgba(0,0,0,.08);
+  }
+  .modebar {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .toggle {
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 10px 14px;
+    background: #fff;
+    color: var(--text);
+    font-weight: 600;
+  }
+  .toggle.active {
+    background: #eff6ff;
+    color: #1d4ed8;
+    border-color: #bfdbfe;
+  }
+  .small { font-size: 14px; color: var(--muted); }
+  .error { color: #b91c1c; font-weight: 700; }
+  .summary {
+    white-space: pre-wrap;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 13px;
+    color: var(--muted);
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Pin Color Counter</h1>
+  <p>This iPhone and iPad version counts Google Earth point pins in <strong>KML</strong> and <strong>KMZ</strong> files by color.</p>
+
+  <div class="card">
+    <label for="fileInput" class="file-label">Choose KML or KMZ</label>
+    <input id="fileInput" type="file" accept=".kml,.kmz,application/vnd.google-earth.kml+xml,application/vnd.google-earth.kmz">
+    <p class="small" style="margin-top:10px;">After you publish this on GitHub Pages, open it in Safari and tap <strong>Share → Add to Home Screen</strong> to use it like an app.</p>
+  </div>
+
+  <div class="card">
+    <div class="modebar" style="margin-bottom:12px;">
+      <button id="namedBtn" class="toggle active">Named colors</button>
+      <button id="exactBtn" class="toggle">Exact colors</button>
+      <button id="csvBtn" class="btn secondary" style="margin-left:auto;">Export CSV</button>
+    </div>
+    <div id="status" class="small">No file loaded yet.</div>
+    <div id="results"></div>
+  </div>
+
+  <div class="card">
+    <div class="small" style="margin-bottom:8px;">Summary</div>
+    <div id="summary" class="summary">Results will appear here.</div>
+  </div>
+</div>
+
+<script>
+const NS = {
+  kml: "http://www.opengis.net/kml/2.2",
+  gx: "http://www.google.com/kml/ext/2.2"
+};
+
+let currentResult = null;
+let currentMode = "named";
+
+const KNOWN_GOOGLE_EARTH_HEX = {
+  "d32f2f": "Red",
+  "f57c00": "Orange",
+  "fbc02d": "Yellow",
+  "388e3c": "Green",
+  "1976d2": "Blue",
+  "7b1fa2": "Purple",
+  "c2185b": "Pink",
+  "795548": "Brown",
+  "757575": "Gray",
+  "212121": "Black",
+  "ffffff": "White"
+};
+
+const SWATCHS = {
+  "Red": "#d32f2f",
+  "Orange": "#f57c00",
+  "Yellow": "#fbc02d",
+  "Green": "#388e3c",
+  "Blue": "#1976d2",
+  "Purple": "#7b1fa2",
+  "Pink": "#c2185b",
+  "Brown": "#795548",
+  "Gray": "#757575",
+  "Black": "#212121",
+  "White": "#ffffff",
+  "Unknown": "#9ca3af"
+};
+
+const NAMED_PALETTE = [
+  ["Red",[211,47,47]],
+  ["Orange",[245,124,0]],
+  ["Yellow",[251,192,45]],
+  ["Green",[56,142,60]],
+  ["Blue",[25,118,210]],
+  ["Purple",[123,31,162]],
+  ["Pink",[194,24,91]],
+  ["Brown",[121,85,72]],
+  ["Gray",[117,117,117]],
+  ["Black",[33,33,33]],
+  ["White",[255,255,255]],
+];
+
+function $(id){ return document.getElementById(id); }
+
+function rgbToHex(rgb) {
+  if (!rgb) return "Unknown";
+  return "#" + rgb.map(v => v.toString(16).padStart(2,"0").toUpperCase()).join("");
+}
+function parseKmlColor(value) {
+  if (!value) return null;
+  value = value.trim().replace("#","");
+  try {
+    if (value.length === 8) {
+      const bb = parseInt(value.slice(2,4),16);
+      const gg = parseInt(value.slice(4,6),16);
+      const rr = parseInt(value.slice(6,8),16);
+      return [rr,gg,bb];
+    }
+    if (value.length === 6) {
+      const rr = parseInt(value.slice(0,2),16);
+      const gg = parseInt(value.slice(2,4),16);
+      const bb = parseInt(value.slice(4,6),16);
+      return [rr,gg,bb];
+    }
+  } catch {}
+  return null;
+}
+function parseIconHrefColor(href) {
+  if (!href) return null;
+  try {
+    const url = new URL(href, location.href);
+    const c = (url.searchParams.get("color") || "").replace("#","");
+    if (/^[0-9a-fA-F]{6}$/.test(c)) {
+      return [parseInt(c.slice(0,2),16), parseInt(c.slice(2,4),16), parseInt(c.slice(4,6),16)];
+    }
+  } catch {}
+  return null;
+}
+function rgbDistance(a,b) {
+  return Math.sqrt((a[0]-b[0])**2 + (a[1]-b[1])**2 + (a[2]-b[2])**2);
+}
+function classifyNamedColor(rgb) {
+  if (!rgb) return "Unknown";
+  const hx = rgb.map(v => v.toString(16).padStart(2,"0")).join("").toLowerCase();
+  if (KNOWN_GOOGLE_EARTH_HEX[hx]) return KNOWN_GOOGLE_EARTH_HEX[hx];
+  const [r,g,b] = rgb;
+  const brightness = (r+g+b)/3;
+  const spread = Math.max(r,g,b) - Math.min(r,g,b);
+  if (brightness <= 22) return "Black";
+  if (brightness >= 242 && spread <= 15) return "White";
+  if (spread <= 18) return "Gray";
+  if (r > 180 && g > 80 && g < 190 && b < 110) return "Orange";
+  if (r > 140 && g > 90 && b < 90) return "Brown";
+  if (r > 170 && b > 110 && g < 130) return "Purple";
+  if (r > 170 && g < 100 && b < 120) return "Red";
+  if (r > 180 && g > 170 && b < 120) return "Yellow";
+  if (g > 110 && r < 120 && b < 120) return "Green";
+  if (b > 120 && r < 130 && g < 170) return "Blue";
+
+  let best = null, bestDist = Infinity;
+  for (const [name, ref] of NAMED_PALETTE) {
+    const d = rgbDistance(rgb, ref);
+    if (d < bestDist) {
+      bestDist = d;
+      best = name;
+    }
+  }
+  return best || "Unknown";
+}
+function firstText(el, selector) {
+  const found = el.querySelector(selector);
+  return found && found.textContent ? found.textContent.trim() : null;
+}
+function parseStyleLike(styleEl) {
+  if (!styleEl) return null;
+  const iconStyle = styleEl.querySelector("IconStyle");
+  if (!iconStyle) return null;
+  const colorText = firstText(iconStyle, "color");
+  const hrefText = firstText(iconStyle, "Icon > href");
+  let rgb = colorText ? parseKmlColor(colorText) : null;
+  if (!rgb && hrefText) rgb = parseIconHrefColor(hrefText);
+  return rgb;
+}
+function extractStyleInfo(xml) {
+  const styleDefs = new Map();
+  const styleMaps = new Map();
+
+  for (const style of xml.getElementsByTagName("Style")) {
+    const id = style.getAttribute("id") || style.getAttributeNS(NS.kml, "id");
+    if (id) styleDefs.set(id, parseStyleLike(style));
+  }
+
+  const cstyles = xml.getElementsByTagNameNS(NS.gx, "CascadingStyle");
+  for (const cstyle of cstyles) {
+    const id = cstyle.getAttribute("id") || cstyle.getAttributeNS(NS.kml, "id");
+    if (!id) continue;
+    const inner = cstyle.getElementsByTagName("Style")[0];
+    if (inner) styleDefs.set(id, parseStyleLike(inner));
+  }
+
+  for (const sm of xml.getElementsByTagName("StyleMap")) {
+    const id = sm.getAttribute("id") || sm.getAttributeNS(NS.kml, "id");
+    if (!id) continue;
+    const pairs = sm.getElementsByTagName("Pair");
+    for (const pair of pairs) {
+      const key = firstText(pair, "key");
+      const styleUrl = firstText(pair, "styleUrl");
+      if (key === "normal" && styleUrl) {
+        styleMaps.set(id, styleUrl.replace(/^#/,""));
+        break;
+      }
+    }
+  }
+
+  return {styleDefs, styleMaps};
+}
+function getInlineStyleRgb(pm) {
+  const inlineStyle = pm.querySelector(":scope > Style");
+  return inlineStyle ? parseStyleLike(inlineStyle) : null;
+}
+function resolvePlacemarkRgb(pm, styleDefs, styleMaps) {
+  let rgb = getInlineStyleRgb(pm);
+  if (rgb) return rgb;
+  const styleUrl = firstText(pm, ":scope > styleUrl");
+  if (!styleUrl) return null;
+  let ref = styleUrl.replace(/^#/,"");
+  if (styleMaps.has(ref)) ref = styleMaps.get(ref);
+  return styleDefs.get(ref) || null;
+}
+function analyzeKmlText(text, fileName) {
+  const parser = new DOMParser();
+  const xml = parser.parseFromString(text, "application/xml");
+  if (xml.querySelector("parsererror")) throw new Error("Could not read the KML.");
+  const {styleDefs, styleMaps} = extractStyleInfo(xml);
+
+  const exactCounts = new Map();
+  const namedCounts = new Map();
+  let totalPoints = 0;
+
+  for (const pm of xml.getElementsByTagName("Placemark")) {
+    if (!pm.getElementsByTagName("Point")[0]) continue;
+    const rgb = resolvePlacemarkRgb(pm, styleDefs, styleMaps);
+    totalPoints += 1;
+
+    const exactKey = rgb ? rgbToHex(rgb) : "Unknown";
+    const namedKey = classifyNamedColor(rgb);
+
+    exactCounts.set(exactKey, (exactCounts.get(exactKey) || 0) + 1);
+    namedCounts.set(namedKey, (namedCounts.get(namedKey) || 0) + 1);
+  }
+
+  const sortRows = map => [...map.entries()]
+    .sort((a,b) => b[1]-a[1] || String(a[0]).localeCompare(String(b[0])))
+    .map(([color,count]) => ({color, count}));
+
+  return {
+    fileName,
+    totalPoints,
+    styleDefsCount: styleDefs.size,
+    styleMapsCount: styleMaps.size,
+    exactRows: sortRows(exactCounts),
+    namedRows: sortRows(namedCounts)
+  };
+}
+
+function u16(v, o){ return v.getUint16(o, true); }
+function u32(v, o){ return v.getUint32(o, true); }
+
+async function unzipKmzToKmlText(arrayBuffer) {
+  const view = new DataView(arrayBuffer);
+  const len = view.byteLength;
+
+  let eocdOffset = -1;
+  for (let i = len - 22; i >= Math.max(0, len - 66000); i--) {
+    if (u32(view, i) === 0x06054b50) { eocdOffset = i; break; }
+  }
+  if (eocdOffset < 0) throw new Error("Could not read the KMZ zip structure.");
+
+  const centralDirSize = u32(view, eocdOffset + 12);
+  const centralDirOffset = u32(view, eocdOffset + 16);
+
+  let ptr = centralDirOffset;
+  let chosen = null;
+
+  while (ptr < centralDirOffset + centralDirSize) {
+    if (u32(view, ptr) !== 0x02014b50) throw new Error("Invalid KMZ central directory.");
+    const compression = u16(view, ptr + 10);
+    const compressedSize = u32(view, ptr + 20);
+    const fileNameLen = u16(view, ptr + 28);
+    const extraLen = u16(view, ptr + 30);
+    const commentLen = u16(view, ptr + 32);
+    const localHeaderOffset = u32(view, ptr + 42);
+    const nameBytes = new Uint8Array(arrayBuffer, ptr + 46, fileNameLen);
+    const name = new TextDecoder().decode(nameBytes);
+
+    if (name.toLowerCase() === "doc.kml" || (name.toLowerCase().endsWith(".kml") && !chosen)) {
+      chosen = {name, compression, compressedSize, localHeaderOffset};
+      if (name.toLowerCase() === "doc.kml") break;
+    }
+    ptr += 46 + fileNameLen + extraLen + commentLen;
+  }
+
+  if (!chosen) throw new Error("This KMZ does not contain a KML file.");
+
+  const lh = chosen.localHeaderOffset;
+  if (u32(view, lh) !== 0x04034b50) throw new Error("Invalid KMZ local header.");
+  const localNameLen = u16(view, lh + 26);
+  const localExtraLen = u16(view, lh + 28);
+  const dataStart = lh + 30 + localNameLen + localExtraLen;
+  const comp = new Uint8Array(arrayBuffer, dataStart, chosen.compressedSize);
+
+  let out;
+  if (chosen.compression === 0) {
+    out = comp;
+  } else if (chosen.compression === 8) {
+    if (typeof DecompressionStream === "undefined") {
+      throw new Error("This iPhone/iPad browser cannot unzip KMZ files here. KML still works.");
+    }
+    const ds = new DecompressionStream("deflate-raw");
+    const stream = new Blob([comp]).stream().pipeThrough(ds);
+    out = new Uint8Array(await new Response(stream).arrayBuffer());
+  } else {
+    throw new Error("Unsupported KMZ compression method.");
+  }
+
+  return new TextDecoder().decode(out);
+}
+
+function swatchForRow(row) {
+  if (currentMode === "named") return SWATCHS[row.color] || "#64748b";
+  if (/^#[0-9A-F]{6}$/i.test(row.color)) return row.color;
+  return "#9ca3af";
+}
+
+function renderResult(result) {
+  currentResult = result;
+  $("status").textContent =
+    `Loaded: ${result.fileName} • Total point pins: ${result.totalPoints} • Styles: ${result.styleDefsCount} • StyleMaps: ${result.styleMapsCount}`;
+
+  const rows = currentMode === "named" ? result.namedRows : result.exactRows;
+  const total = result.totalPoints || 1;
+  $("results").innerHTML = "";
+  for (const row of rows) {
+    const div = document.createElement("div");
+    div.className = "row";
+    div.innerHTML = `
+      <div class="left">
+        <div class="name"><span class="swatch" style="background:${swatchForRow(row)}"></span>${row.color}</div>
+        <div class="meta">${((row.count/total)*100).toFixed(1)}%</div>
+      </div>
+      <div class="count">${row.count}</div>
+    `;
+    $("results").appendChild(div);
+  }
+
+  let lines = [
+    `File: ${result.fileName}`,
+    `Total point pins counted: ${result.totalPoints}`,
+    `Mode: ${currentMode === "named" ? "Named colors" : "Exact colors"}`,
+    ``
+  ];
+  for (const row of rows.slice(0, 12)) {
+    lines.push(`${row.color}: ${row.count} (${((row.count/total)*100).toFixed(1)}%)`);
+  }
+  $("summary").textContent = lines.join("\n");
+}
+
+function exportCsv() {
+  if (!currentResult) return;
+  const rows = currentMode === "named" ? currentResult.namedRows : currentResult.exactRows;
+  const total = currentResult.totalPoints || 1;
+  const lines = [
+    ["File", currentResult.fileName],
+    ["Total point pins", currentResult.totalPoints],
+    ["Mode", currentMode === "named" ? "Named colors" : "Exact colors"],
+    [],
+    ["Color", "Count", "Percent"]
+  ];
+  for (const row of rows) {
+    lines.push([row.color, row.count, ((row.count/total)*100).toFixed(1) + "%"]);
+  }
+  const csv = lines.map(r => r.map(v => {
+    const s = String(v ?? "");
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s;
+  }).join(",")).join("\n");
+  const blob = new Blob([csv], {type: "text/csv;charset=utf-8"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = currentResult.fileName.replace(/\.(kml|kmz)$/i, "") + "_" + (currentMode === "named" ? "named" : "exact") + "_counts.csv";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+$("namedBtn").addEventListener("click", () => {
+  currentMode = "named";
+  $("namedBtn").classList.add("active");
+  $("exactBtn").classList.remove("active");
+  if (currentResult) renderResult(currentResult);
+});
+$("exactBtn").addEventListener("click", () => {
+  currentMode = "exact";
+  $("exactBtn").classList.add("active");
+  $("namedBtn").classList.remove("active");
+  if (currentResult) renderResult(currentResult);
+});
+$("csvBtn").addEventListener("click", exportCsv);
+
+$("fileInput").addEventListener("change", async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  $("status").textContent = "Reading file…";
+  $("results").innerHTML = "";
+  $("summary").textContent = "Working…";
+  try {
+    let text;
+    if (/\.kmz$/i.test(file.name)) {
+      text = await unzipKmzToKmlText(await file.arrayBuffer());
+    } else {
+      text = await file.text();
+    }
+    const result = analyzeKmlText(text, file.name);
+    renderResult(result);
+  } catch (err) {
+    $("status").innerHTML = `<span class="error">Error: ${err.message}</span>`;
+    $("summary").textContent = "No results.";
+  }
+});
+</script>
+</body>
+</html>

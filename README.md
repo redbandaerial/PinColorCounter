@@ -1,31 +1,15 @@
-# Pin Color Counter - GitHub Pages Package
+# iOS File Picker Fix for GitHub Pages
 
-This package is ready to upload to a GitHub repository and publish with GitHub Pages.
+This update removes the file-type filter from the picker so iPhone and iPad no longer grey out KML files.
 
-## Files
-- index.html
-- manifest.json
-- .nojekyll
+## What changed
+- The file picker now accepts any file.
+- The app validates KML or KMZ after selection.
+- This specifically fixes Safari on iOS/iPadOS greying out .kml files.
 
-## Fast setup
-1. Create a new GitHub repository.
-2. Upload these files to the repository root.
-3. In GitHub, open:
-   Settings -> Pages
-4. Under "Build and deployment":
-   - Source: Deploy from a branch
-   - Branch: main
-   - Folder: / (root)
-5. Save.
-6. Wait about 1 to 3 minutes.
-7. Your site link will appear on the same Pages screen.
-
-## On iPhone/iPad
-1. Open the GitHub Pages URL in Safari.
-2. Tap Share.
-3. Tap Add to Home Screen.
-
-## Notes
-- The app runs entirely in the browser.
-- Files stay local on the device.
-- It supports KML and KMZ.
+## How to update your site
+1. Download this ZIP.
+2. Unzip it.
+3. Replace the files in your GitHub repo with these updated ones.
+4. Wait a minute for GitHub Pages to redeploy.
+5. Refresh Safari.
